@@ -1,0 +1,13 @@
+# Gost Proxy Configuration
+# HTTP/HTTPS Proxy with Authentication
+
+# Proxy listen address and port
+PROXY_ADDR=:8080
+
+# Authentication credentials
+# Format: username:password
+PROXY_USER=admin
+PROXY_PASS=your_password_here
+
+# Additional SOCKS5 proxy (optional)
+# SOCKS5_ADDR=:1080

@@ -1,0 +1,8 @@
+host = your.vpn.server.ip
+port = 20443
+username = your_username
+password = your_password
+trusted-cert = your_trusted_cert_fingerprint
+set-dns = 0
+pppd-use-peerdns = 0
+persistent=30

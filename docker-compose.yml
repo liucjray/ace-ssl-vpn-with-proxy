@@ -1,0 +1,26 @@
+services:
+  proxy:
+    build: .
+    image: sslvpn:latest
+    dns:
+      - 8.8.8.8
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - "/dev/ppp"
+    restart: always
+    ports:
+      - "8080:8080"  # HTTP/HTTPS Proxy (需要认证)
+      - "1080:1080"  # SOCKS5 Proxy (需要认证)
+      - "1081:1081"  # SOCKS5 Proxy (无需认证，用于 FoxyProxy)
+    networks:
+      vpcbr:
+        ipv4_address: 10.73.0.5
+
+networks:
+  vpcbr:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.73.0.0/16
+         gateway: 10.73.0.1

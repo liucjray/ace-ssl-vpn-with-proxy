@@ -1,0 +1,9 @@
+# Configuration files with sensitive information
+conf/forti.conf
+conf/gost.conf
+
+# Keep example files
+!conf/*.example
+
+# Claude Code settings
+.claude/
