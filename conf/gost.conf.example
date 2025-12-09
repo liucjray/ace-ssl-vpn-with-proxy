@@ -11,3 +11,9 @@ PROXY_PASS=your_password_here
 
 # Additional SOCKS5 proxy (optional)
 # SOCKS5_ADDR=:1080
+
+# Security: Block non-matching traffic
+# When set to "true", only traffic matching VPN routes can pass through
+# All other traffic will be blocked to prevent IP exposure
+# Default: true (recommended for security)
+BLOCK_UNMATCH_TRAFFIC=true

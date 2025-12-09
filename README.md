@@ -29,6 +29,7 @@ curl -x http://admin:你的密碼@YOUR_SERVER_IP:8080 https://ipinfo.io/ip
 - ✅ 用戶名/密碼認證保護
 - ✅ 所有代理流量自動通過 VPN 出口
 - ✅ 支持公網訪問
+- ✅ **安全開關**：可選擇阻止非 VPN 路由的流量，防止主機 IP 外洩（預設開啟）
 
 ## 執行步驟
 
@@ -51,9 +52,15 @@ password = your_password
 # 代理認證憑證
 PROXY_USER=admin
 PROXY_PASS=changeme123  # 請務必修改為強密碼！
+
+# 安全開關：阻止非匹配流量（預設開啟）
+BLOCK_UNMATCH_TRAFFIC=true
 ```
 
-⚠️ **安全提醒**：因為代理服務會暴露到公網，請務必設置強密碼！
+⚠️ **安全提醒**：
+- 因為代理服務會暴露到公網，請務必設置強密碼！
+- `BLOCK_UNMATCH_TRAFFIC=true`（預設）會阻止非 VPN 路由的流量，防止主機 IP 外洩
+- 只有符合 VPN 路由規則的流量（192.168.100-103.0/24, 10.0.0.0/16）可以通過代理
 
 ### 3. 啟動服務
 
@@ -205,9 +212,12 @@ curl --socks5 admin:changeme123@your-server-ip:1080 https://ipinfo.io
 ## 安全建議
 
 1. **強密碼**: 務必修改 `conf/gost.conf` 中的默認密碼
-2. **防火牆**: 如果不需要公網訪問，可以配置防火牆限制訪問 IP
-3. **日誌監控**: 定期檢查 `/var/log/gost.log` 查看訪問記錄
-4. **證書驗證**: VPN 連接已啟用證書驗證 (trusted-cert)
+2. **流量控制**: 保持 `BLOCK_UNMATCH_TRAFFIC=true`（預設開啟），防止主機 IP 意外外洩
+   - 開啟時：只允許 VPN 路由的流量通過，其他流量會被阻止
+   - 關閉時：所有流量都可通過代理，非 VPN 路由的流量會使用主機 IP
+3. **防火牆**: 如果不需要公網訪問，可以配置防火牆限制訪問 IP
+4. **日誌監控**: 定期檢查 `/var/log/gost.log` 查看訪問記錄
+5. **證書驗證**: VPN 連接已啟用證書驗證 (trusted-cert)
 
 ## 故障排除
 
@@ -248,6 +258,29 @@ docker exec sslvpn-proxy-1 iptables -t nat -L -n -v
 - **20443**: Fortinet SSL VPN 端口 (出站連接)
 
 ## 自定義配置
+
+### 修改流量安全開關
+
+編輯 `conf/gost.conf`，調整 `BLOCK_UNMATCH_TRAFFIC` 設置：
+
+```bash
+# 預設：開啟（推薦）- 只允許 VPN 路由的流量通過
+BLOCK_UNMATCH_TRAFFIC=true
+
+# 若要關閉：允許所有流量通過（警告：可能外洩主機 IP）
+BLOCK_UNMATCH_TRAFFIC=false
+```
+
+**行為差異**：
+- `true`（推薦）：
+  - ✅ 只允許訪問 192.168.100-103.0/24、10.0.0.0/16 等 VPN 路由
+  - ✅ 訪問其他網站會被阻止，確保主機 IP 不會外洩
+  - ✅ 最安全的模式
+
+- `false`：
+  - ⚠️ 允許訪問任何網站
+  - ⚠️ 非 VPN 路由的流量會使用主機 IP（可能外洩）
+  - ⚠️ 僅在確實需要時使用
 
 ### 修改代理端口
 
