@@ -29,6 +29,7 @@ curl -x http://admin:你的密碼@YOUR_SERVER_IP:8080 https://ipinfo.io/ip
 - ✅ 用戶名/密碼認證保護
 - ✅ 所有代理流量自動通過 VPN 出口
 - ✅ 支持公網訪問
+- ✅ **IP 白名單**：通過 `white_list.conf` 靈活配置允許訪問的 IP/網段/域名
 - ✅ **安全開關**：可選擇阻止非 VPN 路由的流量，防止主機 IP 外洩（預設開啟）
 
 ## 執行步驟
@@ -44,7 +45,35 @@ username = your_username
 password = your_password
 ```
 
-### 2. 配置代理認證（重要！）
+### 2. 配置白名單（可選但推薦）
+
+修改 `conf/white_list.conf` 設置允許通過 VPN 訪問的 IP 地址、網段和域名：
+
+```bash
+# 內網網段
+192.168.100.0/24
+192.168.101.0/24
+192.168.102.0/24
+192.168.103.0/24
+10.0.0.0/16
+
+# 單個 IP 地址
+# 172.16.0.100
+
+# 域名（會自動解析為 IP）
+# gitlab.oa.acelink.cc
+# jenkins.internal.company.com
+```
+
+**白名單說明**：
+- 每行一個 IP 地址、CIDR 網段或域名
+- 支持註釋（以 `#` 開頭）
+- 空行會被忽略
+- 域名會在容器啟動時自動解析為 IP 地址
+- 域名解析支持 `/etc/hosts` 映射和 DNS 查詢
+- 修改後需要重新構建容器：`docker compose up -d --build`
+
+### 3. 配置代理認證（重要！）
 
 修改 `conf/gost.conf` 設置代理服務器的用戶名和密碼：
 
@@ -60,9 +89,9 @@ BLOCK_UNMATCH_TRAFFIC=true
 ⚠️ **安全提醒**：
 - 因為代理服務會暴露到公網，請務必設置強密碼！
 - `BLOCK_UNMATCH_TRAFFIC=true`（預設）會阻止非 VPN 路由的流量，防止主機 IP 外洩
-- 只有符合 VPN 路由規則的流量（192.168.100-103.0/24, 10.0.0.0/16）可以通過代理
+- 只有符合白名單（`white_list.conf`）的流量可以通過代理
 
-### 3. 啟動服務
+### 4. 啟動服務
 
 ```bash
 # 構建並啟動容器
@@ -72,7 +101,7 @@ docker compose up -d
 sudo bash forward.bash
 ```
 
-### 4. 驗證服務
+### 5. 驗證服務
 
 ```bash
 # 檢查 VPN 是否連接成功
@@ -259,6 +288,60 @@ docker exec sslvpn-proxy-1 iptables -t nat -L -n -v
 
 ## 自定義配置
 
+### 修改 IP 白名單
+
+編輯 `conf/white_list.conf`，添加或移除允許訪問的 IP 地址、網段和域名：
+
+```bash
+# 白名單範例
+192.168.100.0/24           # 整個 C 類網段
+10.10.0.0/16               # B 類網段
+172.16.100.50              # 單個 IP 地址
+gitlab.oa.acelink.cc       # 域名（自動解析）
+jenkins.internal.com       # 內部域名
+```
+
+**使用提示**：
+- 當 `BLOCK_UNMATCH_TRAFFIC=true` 時，只有白名單中的地址可以通過代理訪問
+- **支持域名**：域名會在容器啟動時自動解析為 IP 地址
+  - 優先使用 `getent hosts`（支持 `/etc/hosts` 映射）
+  - 如果失敗則使用 DNS 查詢（`nslookup`）
+- **配合 extra_hosts 使用**：如果內網域名需要特定映射，可在 `docker-compose.yml` 中添加：
+  ```yaml
+  extra_hosts:
+    - "gitlab.oa.acelink.cc:192.168.101.200"
+  ```
+- 如果白名單文件不存在或無法讀取，系統會自動使用預設的網段（192.168.100-103.0/24, 10.0.0.0/16）
+- 修改白名單後，需要重新構建容器：`docker compose up -d --build`
+
+**實際案例**：訪問內網 GitLab
+
+1. 在 `docker-compose.yml` 中添加域名映射：
+   ```yaml
+   extra_hosts:
+     - "gitlab.oa.acelink.cc:192.168.101.200"
+   ```
+
+2. 在 `conf/white_list.conf` 中添加域名：
+   ```bash
+   gitlab.oa.acelink.cc
+   ```
+   或直接添加 IP：
+   ```bash
+   192.168.101.200
+   ```
+
+3. 重新構建容器：
+   ```bash
+   docker compose up -d --build
+   ```
+
+4. 查看解析結果：
+   ```bash
+   docker logs sslvpn-proxy-1 | grep gitlab
+   # 應該看到：✓ Allowed: gitlab.oa.acelink.cc → 192.168.101.200
+   ```
+
 ### 修改流量安全開關
 
 編輯 `conf/gost.conf`，調整 `BLOCK_UNMATCH_TRAFFIC` 設置：
@@ -313,5 +396,6 @@ iptables -I INPUT -p tcp --dport 8080 -j DROP
 - `docker-compose.yml`: 服務編排配置
 - `conf/forti.conf`: VPN 連接配置
 - `conf/gost.conf`: 代理服務器配置
+- `conf/white_list.conf`: IP 白名單配置
 - `scripts/up.sh`: 容器啟動腳本
 - `scripts/keepalive.sh`: VPN 健康檢查腳本

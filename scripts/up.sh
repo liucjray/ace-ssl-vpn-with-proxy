@@ -61,17 +61,93 @@ if [ "$BLOCK_UNMATCH_TRAFFIC" = "true" ]; then
 
     # Allow traffic to VPN-routed networks via any interface
     # (OpenFortiVPN manages these routes automatically)
-    iptables -A OUTPUT -d 192.168.100.0/24 -j ACCEPT
-    iptables -A OUTPUT -d 192.168.101.0/24 -j ACCEPT
-    iptables -A OUTPUT -d 192.168.102.0/24 -j ACCEPT
-    iptables -A OUTPUT -d 192.168.103.0/24 -j ACCEPT
-    iptables -A OUTPUT -d 10.0.0.0/16 -j ACCEPT
+
+    # Function to check if a string is a domain name
+    is_domain() {
+        local entry="$1"
+        # Not a CIDR notation and contains letters (likely a domain)
+        if ! echo "$entry" | grep -q '/'; then
+            if echo "$entry" | grep -q '[a-zA-Z]'; then
+                return 0  # is domain
+            fi
+        fi
+        return 1  # not domain
+    }
+
+    # Function to resolve domain to IP
+    resolve_domain() {
+        local domain="$1"
+        local ip=""
+
+        # Try getent first (works with /etc/hosts)
+        ip=$(getent hosts "$domain" 2>/dev/null | awk '{print $1}' | head -n 1)
+
+        # If getent fails, try nslookup
+        if [ -z "$ip" ]; then
+            ip=$(nslookup "$domain" 2>/dev/null | grep -A1 "Name:" | grep "Address:" | awk '{print $2}' | head -n 1)
+        fi
+
+        echo "$ip"
+    }
+
+    # Read whitelist from configuration file
+    WHITELIST_FILE="/data/vpnclient/white_list.conf"
+
+    if [ -f "$WHITELIST_FILE" ]; then
+        echo "Loading IP/Domain whitelist from $WHITELIST_FILE..."
+
+        # Read whitelist and apply iptables rules
+        while IFS= read -r line || [ -n "$line" ]; do
+            # Skip empty lines and comments
+            case "$line" in
+                ''|'#'*) continue ;;
+            esac
+
+            # Trim whitespace
+            entry=$(echo "$line" | tr -d '[:space:]')
+
+            if [ -z "$entry" ]; then
+                continue
+            fi
+
+            # Check if entry is a domain name
+            if is_domain "$entry"; then
+                echo "  Resolving domain: $entry"
+                resolved_ip=$(resolve_domain "$entry")
+
+                if [ -n "$resolved_ip" ]; then
+                    iptables -A OUTPUT -d "$resolved_ip" -j ACCEPT
+                    echo "  ✓ Allowed: $entry → $resolved_ip"
+                else
+                    echo "  ✗ Failed to resolve: $entry"
+                fi
+            else
+                # Direct IP or CIDR notation
+                iptables -A OUTPUT -d "$entry" -j ACCEPT
+                echo "  ✓ Allowed: $entry"
+            fi
+        done < "$WHITELIST_FILE"
+
+        echo "Whitelist loaded successfully"
+    else
+        echo "Warning: Whitelist file not found at $WHITELIST_FILE"
+        echo "Using default IP ranges..."
+
+        # Fallback to default ranges if whitelist file doesn't exist
+        iptables -A OUTPUT -d 192.168.100.0/24 -j ACCEPT
+        iptables -A OUTPUT -d 192.168.101.0/24 -j ACCEPT
+        iptables -A OUTPUT -d 192.168.102.0/24 -j ACCEPT
+        iptables -A OUTPUT -d 192.168.103.0/24 -j ACCEPT
+        iptables -A OUTPUT -d 10.0.0.0/16 -j ACCEPT
+
+        echo "  ✓ Default ranges applied"
+    fi
 
     # Drop all other outbound traffic to prevent IP leakage
     iptables -A OUTPUT -j REJECT --reject-with icmp-host-unreachable
 
     echo "Security rules applied: Non-matching traffic blocked"
-    echo "  Allowed: VPN routes (192.168.100-103.0/24, 10.0.0.0/16)"
+    echo "  Allowed: VPN routes (as defined in white_list.conf)"
     echo "  Blocked: All other traffic (prevents IP exposure)"
 else
     echo "Security mode disabled: All traffic allowed"

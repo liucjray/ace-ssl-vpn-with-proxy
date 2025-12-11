@@ -1,6 +1,7 @@
 # Configuration files with sensitive information
 conf/forti.conf
 conf/gost.conf
+conf/white_list.conf
 
 # Keep example files
 !conf/*.example
